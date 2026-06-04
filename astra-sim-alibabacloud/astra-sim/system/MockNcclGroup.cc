@@ -20,6 +20,7 @@
 #include <queue>
 #include <cmath>
 #include <algorithm>
+#include <fstream>
 #include "astra-sim/system/MockNcclLog.h"
 using namespace std;
 namespace MockNccl {
@@ -319,6 +320,7 @@ namespace MockNccl {
     } else {
       flow_models[flow_model_name] = genFlowModels(type,rank,op,data_size);
       FlowName2nums[flow_model_name]= 1;
+      dumpDetailedFlowModels(flow_model_name, op, data_size, flow_models[flow_model_name]);
       return flow_models[flow_model_name][rank];
     }
   }
@@ -2099,5 +2101,51 @@ namespace MockNccl {
     nccl_infos[ncclInfoName] = info;
     return info;
     }
+  }
+
+  // Dump the per-collective point-to-point flow list (the "detailed" flow model)
+  // to ncclFlowModel_detailed_flows.csv in the current working directory.
+  // This was previously a dead output in Workload.cc (created but never written).
+  // The full flow set is available here when a flow_model_name is first generated.
+  void MockNcclGroup::dumpDetailedFlowModels(
+      const std::string& coll_name,
+      AstraSim::ComType op,
+      uint64_t data_size,
+      const std::map<int,std::shared_ptr<FlowModels>>& rank2flows) {
+    const std::string fname = "ncclFlowModel_detailed_flows.csv";
+    std::ofstream ofs;
+    if (!detailed_dump_header_written) {
+      ofs.open(fname, std::ios::out | std::ios::trunc);
+      if (ofs.is_open()) {
+        ofs << "collective,op,data_size,channel_id,flow_id,src,dest,flow_size,"
+               "chunk_id,chunk_count,conn_type,parent_flow_ids,prev_flow_ids\n";
+        detailed_dump_header_written = true;
+      }
+    } else {
+      ofs.open(fname, std::ios::out | std::ios::app);
+    }
+    if (!ofs.is_open()) return;
+    for (const auto& rk : rank2flows) {
+      int rank = rk.first;
+      if (!rk.second) continue;
+      for (const auto& kv : *rk.second) {
+        const SingleFlow& f = kv.second;
+        // Each flow is stored under both its src and dest rank; emit once (src view).
+        if (f.src != rank) continue;
+        std::string parents;
+        for (size_t i = 0; i < f.parent_flow_id.size(); ++i) {
+          parents += (i ? ";" : "") + std::to_string(f.parent_flow_id[i]);
+        }
+        std::string prevs;
+        for (size_t i = 0; i < f.prev.size(); ++i) {
+          prevs += (i ? ";" : "") + std::to_string(f.prev[i]);
+        }
+        ofs << coll_name << ',' << static_cast<int>(op) << ',' << data_size << ','
+            << f.channel_id << ',' << f.flow_id << ',' << f.src << ',' << f.dest << ','
+            << f.flow_size << ',' << f.chunk_id << ',' << f.chunk_count << ','
+            << f.conn_type << ',' << parents << ',' << prevs << '\n';
+      }
+    }
+    ofs.close();
   }
 }

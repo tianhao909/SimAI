@@ -135,8 +135,10 @@ namespace MockNccl {
     std::map<std::string,int> FlowName2nums;
     std::map<std::string ,std::map<int,std::shared_ptr<FlowModels> >> flow_models; 
     std::map<std::string ,struct ncclInfo*> nccl_infos;  
+    bool detailed_dump_header_written = false;
     std::shared_ptr<void> getFlowModels(GroupType type , int rank, AstraSim::ComType op,uint64_t data_size,int layer_num,State loopstate);
    private:
+    void dumpDetailedFlowModels(const std::string& coll_name, AstraSim::ComType op, uint64_t data_size, const std::map<int,std::shared_ptr<FlowModels>>& rank2flows);
     std::map<int,std::shared_ptr<FlowModels>> genFlowModels(GroupType type , int rank, AstraSim::ComType op,uint64_t data_size);
     std::map<int,std::shared_ptr<FlowModels>> genReduceScatterFlowModels(GroupType type , int rank, uint64_t data_size);
     std::map<int,std::shared_ptr<FlowModels>> genAlltoAllFlowModels(GroupType type, int rank, uint64_t data_size);
