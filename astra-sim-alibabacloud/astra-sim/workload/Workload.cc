@@ -7,6 +7,8 @@ LICENSE file in the root directory of this source tree.
 #include "CSVWriter.hh"
 #include "Layer.hh"
 #include "astra-sim/system/MockNcclLog.h"
+#include <cstdlib>
+#include <cstring>
 
 namespace AstraSim {
 Workload::~Workload() {
@@ -65,12 +67,20 @@ Workload::Workload(
   if (generator->id == 0 && seprate_log) {
     std::cout << "stat path: " << path << " ,total rows: " << total_rows
               << " ,stat row: " << stat_row << std::endl;
-    detailed = new CSVWriter(path, "detailed_"+std::to_string(generator->total_nodes)+".csv");
-    end_to_end = new CSVWriter(path, "EndToEnd.csv");
-    dimension_utilization =
-        new CSVWriter(path, run_name + "_dimension_utilization_"+std::to_string(generator->npu_offset)+".csv");
-    if (stat_row == 0) {
-      initialize_stat_files();
+    // Switch: AS_FLOWMODEL_ONLY=1 produces only ncclFlowModel_detailed_flows.csv
+    // (emitted by MockNcclGroup during simulation) and suppresses EndToEnd.csv /
+    // detailed_<N>.csv / *_dimension_utilization_*.csv / chart.html. The three
+    // writers stay nullptr; every use is null-guarded here and in Layer.cc.
+    // NOTE: ns3 still runs fully -- this does not skip simulation / save time.
+    static int flowmodel_only = [](){ const char* e = std::getenv("AS_FLOWMODEL_ONLY"); return (e!=nullptr && strcmp(e,"0")!=0) ? 1 : 0; }();
+    if (!flowmodel_only) {
+      detailed = new CSVWriter(path, "detailed_"+std::to_string(generator->total_nodes)+".csv");
+      end_to_end = new CSVWriter(path, "EndToEnd.csv");
+      dimension_utilization =
+          new CSVWriter(path, run_name + "_dimension_utilization_"+std::to_string(generator->npu_offset)+".csv");
+      if (stat_row == 0) {
+        initialize_stat_files();
+      }
     }
   }
   #endif
@@ -192,7 +202,7 @@ void Workload::report() {
       dims.push_back(
           generator->scheduler_unit->usage[i].report_percentage(10000));
     }
-    dimension_utilization->finalize_csv(dims);
+    if (dimension_utilization) dimension_utilization->finalize_csv(dims);
   }
   #endif
   #ifdef NS3_MPI 
@@ -202,7 +212,7 @@ void Workload::report() {
       dims.push_back(
           generator->scheduler_unit->usage[i].report_percentage(10000));
     }
-    dimension_utilization->finalize_csv(dims);
+    if (dimension_utilization) dimension_utilization->finalize_csv(dims);
   }
   #endif
 }

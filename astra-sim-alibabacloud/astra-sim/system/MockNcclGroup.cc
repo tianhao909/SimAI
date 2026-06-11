@@ -320,7 +320,13 @@ namespace MockNccl {
     } else {
       flow_models[flow_model_name] = genFlowModels(type,rank,op,data_size);
       FlowName2nums[flow_model_name]= 1;
-      dumpDetailedFlowModels(flow_model_name, op, data_size, flow_models[flow_model_name]);
+      // Switch: AS_DUMP_DETAILED_FLOWS (default "1" = enabled, preserves existing behavior).
+      // Set to "0" to skip generating ncclFlowModel_detailed_flows.csv. This dump only
+      // reads flow_models and writes a file; it never mutates simulation state, so the
+      // end-to-end result must be identical whether it is enabled or disabled.
+      static int dump_detailed = [](){ const char* e = std::getenv("AS_DUMP_DETAILED_FLOWS"); return (e==nullptr || strcmp(e,"0")!=0) ? 1 : 0; }();
+      if (dump_detailed)
+        dumpDetailedFlowModels(flow_model_name, op, data_size, flow_models[flow_model_name]);
       return flow_models[flow_model_name][rank];
     }
   }
