@@ -2083,8 +2083,19 @@ namespace MockNccl {
           if(type==TP){
             if(gpu_type==GPUType::A100||gpu_type==GPUType::A800){
               info->algorithm = NCCL_ALGO_RING;
-            }else if(gpu_type==GPUType::H100||gpu_type==GPUType::H800){
-              if (gp_info.nRanks >= 8 && NVLSenable) {
+            }else if(gpu_type==GPUType::H100||gpu_type==GPUType::H800||gpu_type==GPUType::H20){
+              // C-Task1 (NVLS algorithm awareness, incl. H20).
+              // Real-machine ground truth (H20x8, NCCL 2.26.5 & 2.30.7, calib_260611):
+              // AllReduce default chooses RING for <=1MB and NVLS for >=4MB (NVLS
+              // crossover ~ a few MB). Previously H20 fell through to RING here,
+              // mismatching the real library. We now treat H20 like H100/H800 and
+              // add a size threshold so small messages stay on RING (matching real).
+              // Threshold is a tunable constant set near the measured crossover.
+              static const uint64_t NVLS_MIN_BYTES = []() {
+                const char* e = std::getenv("AS_NVLS_MIN_BYTES");
+                return e ? strtoull(e, nullptr, 10) : 2097152ULL; // 2MB (between 1M RING and 4M NVLS)
+              }();
+              if (gp_info.nRanks >= 8 && NVLSenable && data_size >= NVLS_MIN_BYTES) {
                 info->algorithm = NCCL_ALGO_NVLS;
               } else {
                 info->algorithm = NCCL_ALGO_RING;
@@ -2100,6 +2111,10 @@ namespace MockNccl {
       case AstraSim::ComType::Reduce_Scatter:
       case AstraSim::ComType::All_to_All:
       default:
+          // Real-machine ground truth (H20x8, calib_260611): AllGather /
+          // ReduceScatter default to RING across all sizes on single-node H20
+          // (PAT is present in v2.30's algo table but NOT selected by default
+          // here). So RING remains correct for these on H20 single node.
           info->algorithm = NCCL_ALGO_RING;
           break;
     }

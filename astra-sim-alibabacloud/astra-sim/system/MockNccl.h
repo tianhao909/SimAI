@@ -16,7 +16,7 @@
 #ifndef ASTRA_SIM_MOCKNCCL_MOCKNCCL_H
 #define ASTRA_SIM_MOCKNCCL_MOCKNCCL_H
 
-#define NCCL_NUM_ALGORITHMS 6 // Tree/Ring/CollNet*
+#define NCCL_NUM_ALGORITHMS 7 // Tree/Ring/CollNet*/NVLS*/PAT (PAT added for v2.30)
 #define NCCL_ALGO_UNDEF -1
 #define NCCL_ALGO_TREE 0
 #define NCCL_ALGO_RING 1
@@ -24,6 +24,7 @@
 #define NCCL_ALGO_COLLNET_CHAIN 3
 #define NCCL_ALGO_NVLS 4
 #define NCCL_ALGO_NVLS_TREE 5
+#define NCCL_ALGO_PAT 6
 
 #define NCCL_NUM_PROTOCOLS 3 // Simple/LL/LL128
 #define NCCL_PROTO_UNDEF -1
@@ -65,7 +66,8 @@ static const double llMaxBws[3][3] = {
 static const float baseLat  [NCCL_NUM_ALGORITHMS][NCCL_NUM_PROTOCOLS] = {
     {  6.8, 14.0,    0 }, {  6.6, 14.0,  8.4 }, // Tree, Ring
     {  6.8, 14.0,    0 }, {  6.8, 14.0,    0 },       // Collnet Direct, Chain
-    {    0,    0, 23.0 }, {    0,    0, 23.0 }};     // NVLS, NVLS Tree
+    {    0,    0, 23.0 }, {    0,    0, 23.0 },     // NVLS, NVLS Tree
+    {  6.6, 14.0,  8.4 }};   // PAT (v2.30; mirror Ring baseline until calibrated -- H20 single node does not select PAT by default, see calib_260611)
 
 static const double perChMaxRingLL128Bws[3][3] = {
     /* Volta (N1/N2/N4) */  {20.0, 20.0, 20.0},
@@ -91,15 +93,18 @@ static float hwLat [3][NCCL_NUM_ALGORITHMS][NCCL_NUM_PROTOCOLS] =
     { /* NVLINK */
      { /* Tree (LL/LL128/Simple)*/ { .6, 1.25,  4 }, /* Ring (LL/LL128/Simple)*/ { .6, 1.9, 3.4 },
       /* CollNetDirect (Simple)*/ { 0, 0, 8.0 }, /* CollNetChain (Simple)*/ { 0, 0, 4.75 },
-      /* NVLS */ { 0, 0, 0 }, /* NVLSTree */ { 0, 0, 0 } },
+      /* NVLS */ { 0, 0, 0 }, /* NVLSTree */ { 0, 0, 0 },
+      /* PAT (v2.30; mirror Ring until calibrated)*/ { .6, 1.9, 3.4 } },
      /* PCI */
      { /* Tree (LL/LL128/Simple)*/ { 1.0, 1.9,  6 }, /* Ring (LL/LL128/Simple)*/ { 1.0, 2.5, 5.7 },
       /* CollNetDirect (Simple)*/ { 0, 0, 8.0 }, /* CollNetChain (Simple)*/ { 0, 0, 8.0 },
-      /* NVLS */ { 0, 0, 0 }, /* NVLSTree */ { 0, 0, 0 } },
+      /* NVLS */ { 0, 0, 0 }, /* NVLSTree */ { 0, 0, 0 },
+      /* PAT */ { 1.0, 2.5, 5.7 } },
      /* NET */
      { /* Tree (LL/LL128/Simple)*/ { 5.0, 8.5, 14 }, /* Ring (LL/LL128/Simple)*/ { 2.7, 4.0, 14.0 },
       /* CollNetDirect (Simple)*/ { 0, 0, 10.7 }, /* CollNetChain (Simple)*/ { 0, 0, 14 },
-      /* NVLS */ { 0, 0, 18 }, /* NVLSTree */ { 0, 0, 19 } }
+      /* NVLS */ { 0, 0, 18 }, /* NVLSTree */ { 0, 0, 19 },
+      /* PAT */ { 2.7, 4.0, 14.0 } }
 };
 
 // We want link types and path types to match as much as possible
