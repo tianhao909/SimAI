@@ -38,6 +38,14 @@ struct ncclFlowTag {
   int tag_id; 
   std::vector<int> tree_flow_list;
   bool nvls_on;
+  // B-Task1 (calib round2, 260611): algorithm/protocol carried alongside the flow.
+  // Default values (-1 = UNDEF) preserve all existing constructor calls (PhyMultiThread,
+  // SimAiFlowModelRdma, NcclTreeFlowModel) without changes; populated only when
+  // AS_PROTO_AWARE=1 (see MockNcclGroup.cc B-Task2). Enables future bucketed
+  // AS_SEND_LAT (B-Task3) and proto-aware busbw saturation (B-Task4); ns3 datapath
+  // does NOT yet consume these fields (planned, see report).
+  int algorithm = -1; // NCCL_ALGO_UNDEF
+  int protocol  = -1; // NCCL_PROTO_UNDEF
   ncclFlowTag():
     channel_id(-1),
     chunk_id(-1),

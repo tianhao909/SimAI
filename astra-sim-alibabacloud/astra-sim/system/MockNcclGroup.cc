@@ -886,7 +886,15 @@ namespace MockNccl {
   std::map<int,std::shared_ptr<FlowModels>> MockNcclGroup::genAllreduceNVLSFlowModels(GroupType type,int rank,uint64_t data_size){
     GroupInfo gp_info;
     int gp_idx;
-    int chunk_count = 4;
+    // A-Task1 (calib round2, 260611): NVLS chunk_count tunable via AS_NVLS_CHUNK_COUNT.
+    // Larger chunk_count -> smaller per-flow size -> better pipeline overlap -> higher
+    // effective busbw (closer to real machine, which the default 4 underestimates).
+    // Default stays 4 so existing behavior is unchanged unless explicitly overridden.
+    static const int chunk_count = [](){
+      const char* e = std::getenv("AS_NVLS_CHUNK_COUNT");
+      int v = e ? atoi(e) : 4;
+      return (v >= 1) ? v : 4;
+    }();
     std::map<int,FlowModels>rank2flowmodels;
     std::map<int,std::shared_ptr<FlowModels>>rank2pflowmodels;
     MockNcclLog* NcclLog = MockNcclLog::getInstance();
@@ -2118,7 +2126,29 @@ namespace MockNccl {
           info->algorithm = NCCL_ALGO_RING;
           break;
     }
-    info->protocol = NCCL_PROTO_UNDEF;
+    // B-Task2 (calib round2, 260611): protocol link-through.
+    // Historically info->protocol was hardcoded to NCCL_PROTO_UNDEF and never
+    // consumed downstream (dead field). Under the AS_PROTO_AWARE switch (default
+    // "0" = off, preserving the legacy UNDEF behavior and EndToEnd bit-exactness)
+    // we assign protocol following the real-machine proto_actual pattern observed
+    // on H20x8 (calib_260611, default rows):
+    //   AllReduce(NVLS): <=1MB -> LL, >=4MB -> SIMPLE
+    //   AllGather/ReduceScatter(RING): <=4MB -> LL, 16MB -> LL128, >=64MB -> SIMPLE
+    // NOTE: as of this round protocol is still not consumed by the ns3 datapath
+    // (see report); this populates the field for downstream (e.g. AS_SEND_LAT
+    // per-(algo,proto) bucketing in B-Task3) and for FlowModel provenance.
+    static const int proto_aware = [](){ const char* e = std::getenv("AS_PROTO_AWARE"); return (e && strcmp(e,"1")==0) ? 1 : 0; }();
+    if (!proto_aware) {
+      info->protocol = NCCL_PROTO_UNDEF;
+    } else if (info->algorithm == NCCL_ALGO_NVLS || info->algorithm == NCCL_ALGO_NVLS_TREE) {
+      // NVLS path is SIMPLE-only on real machine.
+      info->protocol = (data_size <= 1048576ULL) ? NCCL_PROTO_LL : NCCL_PROTO_SIMPLE;
+    } else {
+      // RING-class (AllGather/ReduceScatter/AllReduce-RING): LL -> LL128 -> SIMPLE.
+      if (data_size <= 4194304ULL)        info->protocol = NCCL_PROTO_LL;
+      else if (data_size <= 16777216ULL)  info->protocol = NCCL_PROTO_LL128;
+      else                                info->protocol = NCCL_PROTO_SIMPLE;
+    }
     nccl_infos[ncclInfoName] = info;
     return info;
     }
